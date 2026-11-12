@@ -55,11 +55,12 @@ void setup() {
 
   // Initialized input pin for power and day/night time
 
-  // Have the relays open for Com to NC: Set the relay signal to high
-  digitalWrite(Battery_Discharge_relay, HIGH);
-  digitalWrite(Battery_Charge_relay, HIGH);
-  digitalWrite(Solar_Panel_relay, HIGH);
-  digitalWrite(Fuel_Cell_relay, HIGH);
+  // Have the relays open for Com to NO: Set the relay signal to low for open
+  // Battery_Charge_relay will be the only relay connected to NC
+  digitalWrite(Battery_Discharge_relay, LOW);//HIGH IS OPEN; LOW IS CLOSED
+  digitalWrite(Battery_Charge_relay, LOW);// LOW IS OPEN;  HIGH IS CLOSED
+  digitalWrite(Solar_Panel_relay, LOW);// LOW IS OPEN;  HIGH IS CLOSED
+  digitalWrite(Fuel_Cell_relay, LOW);// LOW IS OPEN;  HIGH IS CLOSED
 
   power_switch.setDebounceTime(50);
   day_nigth_switch.setDebounceTime(50);
@@ -67,21 +68,28 @@ void setup() {
   Serial.begin(9600);
   state = daytime;
 }
+int i = 0;
 
 void loop() 
 {
   delay(500); //delay to have all the system powered on, delay can be remove if needed
   while(true){
-    power_switch.loop();
-    //int state1 = power_switch.getState();
-    //if (state1 == HIGH)
-    //Serial.println("The power switch: OFF");
-    //else Serial.println("The power switch: ON");
-    //int state2 = day_nigth_switch.getState();
-    // if (state2 == HIGH)
-    //Serial.println("The day night switch: OFF");
-    //else Serial.println("The night switch: ON");
-    // reading at the power switch
+  power_switch.loop();
+  Serial.println(i);
+	if(i<=5)
+	{
+    Serial.println(i);
+		Start_up();
+		delay(1000);
+		i=i+1;
+	}
+	else if (i>5)
+	{
+	/*while(i<10)
+	{
+		Start_up_to_Day_or_Night();
+		delay(1000);
+	}*/
     while(power_switch.getState() == LOW)
     { // switch power is on
         power_switch.loop();
@@ -120,26 +128,29 @@ void loop()
         Serial.println("YOU ARE STUPID");// yes but no
         break;
        }
+	   		i=i+1;
     }// end of while loop when the power is on
     if(power_switch.getState() == HIGH)
     {// if power switch is off have all the relays open (disconnected from power)
       Serial.println("Relays OFF");
-      digitalWrite(Battery_Discharge_relay, HIGH);
+      digitalWrite(Battery_Discharge_relay, LOW);
       digitalWrite(Battery_Charge_relay, HIGH);
       digitalWrite(Solar_Panel_relay, HIGH);
       digitalWrite(Fuel_Cell_relay, HIGH);
     }
     // print out the state for power and time to verify the switch are working 
     delay(1000);// delay can be remove add more time if needed to verify time switching 
+	}
   }
 }
 
 
 void State_Daytime(){
-  digitalWrite(Battery_Discharge_relay, HIGH); // open
-  digitalWrite(Solar_Panel_relay, LOW); // closed
-  digitalWrite(Fuel_Cell_relay, HIGH); // open
-  digitalWrite(Battery_Charge_relay, LOW); // closed
+      Serial.print("daytime");
+  digitalWrite(Battery_Discharge_relay, LOW); // open
+  digitalWrite(Solar_Panel_relay, HIGH); // closed
+  digitalWrite(Fuel_Cell_relay, LOW); // open
+  digitalWrite(Battery_Charge_relay, HIGH); // closed
 
   Solar_Voltage = Read_Volt(Solar_Pin); // read solar voltage
   if(Solar_Voltage < cutoff_voltage){
@@ -153,7 +164,8 @@ void State_Daytime(){
 }
 
 void Day_to_Night(){//transition period to night
-  digitalWrite(Battery_Discharge_relay, HIGH); // open
+  Serial.print("day to night");
+  digitalWrite(Battery_Discharge_relay, LOW); // open
   digitalWrite(Battery_Charge_relay, HIGH); // open
   digitalWrite(Solar_Panel_relay, LOW); // closed
   digitalWrite(Fuel_Cell_relay, LOW); // Closed
@@ -174,11 +186,46 @@ void Day_to_Night(){//transition period to night
   }
 }
 
+//initial start up condition when turning on the circuit
+void Start_up(){
+  Serial.print("starting");
+  digitalWrite(Battery_Discharge_relay, LOW); // closed
+  digitalWrite(Fuel_Cell_relay, HIGH); // closed
+  digitalWrite(Solar_Panel_relay, HIGH); // closed
+  digitalWrite(Battery_Charge_relay, LOW); // open
+}
+
+//transitioning from start up to either daytime or nighttime
+void Start_up_to_Day_or_Night(){
+  digitalWrite(Battery_Charge_relay, HIGH); // open
+  digitalWrite(Battery_Discharge_relay, LOW); // open
+  digitalWrite(Solar_Panel_relay, HIGH); // closed
+  digitalWrite(Fuel_Cell_relay, HIGH); // closed
+  
+  Solar_Voltage = Read_Volt(Solar_Pin); // read solar voltage
+  if(Solar_Voltage >= bus_voltage){
+    state = daytime;
+    digitalWrite(Fuel_Cell_relay, LOW); // open
+    delay(500);//delay for safety but can be remove for efficiency
+    digitalWrite(Battery_Charge_relay, HIGH); // closed
+  }
+  else if(Solar_Voltage < bus_voltage)
+  {
+	//Open solar and discharge and closed charging
+    state = nighttime;
+    digitalWrite(Solar_Panel_relay, LOW); // open
+    digitalWrite(Battery_Discharge_relay, HIGH); // open
+    delay(500);// before we start to charge the battery have the delay for safety 
+    digitalWrite(Battery_Charge_relay, HIGH); // closed 
+  }
+}
+
 void State_nighttime(){
+  Serial.print("nighttime");
   digitalWrite(Battery_Discharge_relay, HIGH); // open
-  digitalWrite(Fuel_Cell_relay, LOW); // closed
-  digitalWrite(Solar_Panel_relay, HIGH); // open
-  digitalWrite(Battery_Charge_relay, LOW); // closed
+  digitalWrite(Fuel_Cell_relay, HIGH); // closed
+  digitalWrite(Solar_Panel_relay, LOW); // open
+  digitalWrite(Battery_Charge_relay, HIGH); // closed
 
   Solar_Voltage = Read_Volt(Solar_Pin); // read solar voltage
   if(Solar_Voltage >= bus_voltage){
@@ -187,21 +234,22 @@ void State_nighttime(){
 }
 
 void Night_to_Day(){//transition period
+  Serial.print("night to day");
   digitalWrite(Battery_Charge_relay, HIGH); // open
-  digitalWrite(Battery_Discharge_relay, HIGH); // open
-  digitalWrite(Solar_Panel_relay, LOW); // closed
-  digitalWrite(Fuel_Cell_relay, LOW); // closed
+  digitalWrite(Battery_Discharge_relay, LOW); // open
+  digitalWrite(Solar_Panel_relay, HIGH); // closed
+  digitalWrite(Fuel_Cell_relay, HIGH); // closed
   
   Solar_Voltage = Read_Volt(Solar_Pin); // read solar voltage
   if(Solar_Voltage >= bus_voltage){
     state = daytime;
-    digitalWrite(Fuel_Cell_relay, HIGH); // open
+    digitalWrite(Fuel_Cell_relay, LOW); // open
     delay(500);//delay for safety but can be remove for efficiency
-    digitalWrite(Battery_Charge_relay, low); // closed
+    digitalWrite(Battery_Charge_relay, HIGH); // closed
   }
 }
 
-
+//need to adjust value of voltage
 float Read_Volt(byte POS){
   float relay = analogRead(POS);
   float volt = relay * (25.8 / 1023.0) ;
