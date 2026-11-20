@@ -10,8 +10,11 @@
 // Arduino pinout for the realys at the power side
 
 #include <ezButton.h>
+#include "INA226.h"
 
+INA226 INA(0x40);
 ezButton power_switch(3);
+
 const int Solar_Panel_relay = 23;
 const int Fuel_Cell_relay = 25;
 const int Battery_Discharge_relay = 27;
@@ -25,7 +28,7 @@ const int photoPin = A2;  // Photoresistor pin
 //photoresistor
 int Photo_R = 0;
 const int light_threshold = 550; // Adjust this cutoff value for your lighting 
-// lower value means more light
+// lower value means more light exposure
 
 // Voltage parameter
 float IT_Voltage;
@@ -54,7 +57,14 @@ void setup() {
 
   power_switch.setDebounceTime(50);
 
-  Serial.begin(9600);
+  Serial.begin(115200);
+  Wire.begin();
+  if (!INA.begin() )
+  {
+    Serial.println("could not connect. Fix and Reboot");
+  }
+  INA.setMaxCurrentShunt(1, 0.002);
+  Serial.println("\nBUS");
 }
 int i = 0;
 
@@ -71,9 +81,9 @@ void loop()
 	else if (i>5)
 	{
     while(power_switch.getState() == LOW){ // switch power is on
-      Serial.print(" Fuel Cell");
-      Fuel_Cell_Voltage = Read_Volt(FC_Pin);
-      Serial.print(" IT Load");
+      Fuel_Cell_Volt_read();// read voltage
+      // read and print IT load voltage
+      Serial.print("IT Load");
       IT_Voltage = Read_Volt(IT_Load_Pin);
       if( Fuel_Cell_Voltage >= cutoff_voltage){// fuel cell is at full operation FC >= 24V
         Photo_R = analogRead(photoPin);
@@ -124,28 +134,31 @@ void Start_up(){
 
 void State_Daytime(){
   Serial.println("State: daytime");
-  digitalWrite(Battery_Discharge_relay, HIGH); // open
   digitalWrite(Solar_Panel_relay, HIGH); // closed
   digitalWrite(Fuel_Cell_relay, HIGH); // closed
+  delay(1000); // delay for the FC to reach efficient current
+  digitalWrite(Battery_Discharge_relay, HIGH); // open
   digitalWrite(Battery_Charge_relay, HIGH); // closed
 }
 
 //transitioning from start up to either daytime or nighttime
 void State_nighttime(){
-  Serial.print("State: nighttime");
-  digitalWrite(Battery_Discharge_relay, HIGH); // open
+  Serial.println("State: nighttime");
   digitalWrite(Fuel_Cell_relay, HIGH); // closed
   digitalWrite(Solar_Panel_relay, LOW); // open
+  delay(1000); // delay for the FC to reach efficient current
+  digitalWrite(Battery_Discharge_relay, HIGH); // open
   digitalWrite(Battery_Charge_relay, HIGH); // closed
 }
 
 void FC_Down(){//fuel cell is down
-  Serial.print("State: Fuel Cell Down  BAttery Discharge");
+  Serial.println("State: Fuel Cell Down  BAttery Discharge");
   digitalWrite(Battery_Charge_relay, LOW); // open
+  //delay(1000);// delay FC closed
   digitalWrite(Fuel_Cell_relay, LOW); // open
   digitalWrite(Battery_Discharge_relay, LOW); // Closed
 
-  Serial.print(" IT Load");
+  Serial.print("IT Load");
   IT_Voltage = Read_Volt(IT_Load_Pin);
 
   Photo_R = analogRead(photoPin);
@@ -162,7 +175,7 @@ void FC_Down(){//fuel cell is down
 float Read_Volt(byte POS){
   float relay = analogRead(POS);
   float volt = relay * (25 / 1023.0) ;// change denomitanor 
-  Serial.print(" Voltage Relay: ");
+  Serial.print(" Voltage: ");
   Serial.println(volt);
   return volt;
 }
@@ -172,7 +185,8 @@ int Photo_R_Value(){
 }
 
 
-void Print_All_Volt(){
-
+void Fuel_Cell_Volt_read(){
+  Serial.println("Fuel Cell Voltage relay: ");
+  Serial.println(INA.getBusVoltage(), 3);
 }
 
